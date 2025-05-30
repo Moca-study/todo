@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シンプルなToDoアプリ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Interフォントを適用 */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* カスタムスタイル（必要であれば） */
+        .task-item.completed span {
+            text-decoration: line-through;
+            color: #9ca3af; /* gray-400 */
+        }
+        /* アニメーション用のクラス */
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-out {
+            animation: fadeOut 0.3s ease-in forwards;
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+        /* ダークモード対応（Tailwindのdark:プレフィックスを使用） */
+        /* 例: body { @apply bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100; } */
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-br from-purple-600 to-blue-500 min-h-screen flex flex-col items-center justify-center p-4 selection:bg-purple-300 selection:text-purple-900">
+
+    <div class="bg-white dark:bg-gray-800 shadow-2xl rounded-xl p-6 md:p-8 w-full max-w-lg transform transition-all duration-500 hover:scale-105">
+        <header class="mb-6 text-center">
+            <h1 class="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-blue-500 dark:from-purple-400 dark:to-blue-300">My ToDo List</h1>
+            <p class="text-gray-600 dark:text-gray-400 mt-2">今日やることを整理しよう！</p>
+        </header>
+
+        <form id="task-form" class="flex gap-3 mb-6">
+            <input
+                type="text"
+                id="task-input"
+                placeholder="新しいタスクを入力..."
+                class="flex-grow p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-shadow dark:bg-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                aria-label="新しいタスク"
+            />
+            <button
+                type="submit"
+                class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50"
+                aria-label="タスクを追加"
+            >
+                追加
+            </button>
+        </form>
+
+        <div id="task-list-container">
+            <h2 class="text-xl font-semibold mb-3 text-gray-700 dark:text-gray-300">タスク一覧</h2>
+            <ul id="task-list" class="space-y-3">
+                </ul>
+            <p id="no-tasks-message" class="text-gray-500 dark:text-gray-400 text-center py-4 hidden">まだタスクはありません。</p>
+        </div>
+
+        <div class="mt-8 text-center">
+            <button
+                id="clear-all-button"
+                class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 hidden"
+                aria-label="完了済みタスクを全て削除"
+            >
+                完了済みを全て削除
+            </button>
+        </div>
+    </div>
+
+    <div id="message-box" class="fixed bottom-5 right-5 bg-green-500 text-white p-3 rounded-lg shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none">
+        メッセージ
+    </div>
+
+    <footer class="mt-8 text-center text-sm text-white/80">
+        <p>&copy; <span id="current-year"></span> シンプルToDoアプリ. GitHub Pagesで動いています。</p>
+    </footer>
+
+    <script>
+        // DOM要素の取得
+        const taskForm = document.getElementById('task-form');
+        const taskInput = document.getElementById('task-input');
+        const taskList = document.getElementById('task-list');
+        const noTasksMessage = document.getElementById('no-tasks-message');
+        const clearAllButton = document.getElementById('clear-all-button');
+        const messageBox = document.getElementById('message-box');
+        const currentYearSpan = document.getElementById('current-year');
+
+        // 年をフッターに表示
+        currentYearSpan.textContent = new Date().getFullYear();
+
+        // タスクをlocalStorageから読み込む
+        let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+
+        // メッセージ表示関数
+        function showMessage(text, type = 'success') {
+            messageBox.textContent = text;
+            messageBox.classList.remove('opacity-0', 'bg-green-500', 'bg-red-500', 'bg-blue-500'); // 既存の色クラスを削除
+            if (type === 'success') {
+                messageBox.classList.add('bg-green-500');
+            } else if (type === 'error') {
+                messageBox.classList.add('bg-red-500');
+            } else { // info
+                messageBox.classList.add('bg-blue-500');
+            }
+            messageBox.classList.add('opacity-100');
+            messageBox.classList.remove('pointer-events-none');
+
+            setTimeout(() => {
+                messageBox.classList.add('opacity-0');
+                messageBox.classList.add('pointer-events-none');
+            }, 3000);
+        }
+
+        // タスクリストの表示を更新する関数
+        function renderTasks() {
+            taskList.innerHTML = ''; // リストをクリア
+            if (tasks.length === 0) {
+                noTasksMessage.classList.remove('hidden');
+                clearAllButton.classList.add('hidden'); // タスクがない場合はクリアボタンも隠す
+            } else {
+                noTasksMessage.classList.add('hidden');
+                tasks.forEach((task, index) => {
+                    const listItem = document.createElement('li');
+                    listItem.className = `task-item flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg shadow hover:shadow-md transition-shadow fade-in ${task.completed ? 'completed' : ''}`;
+                    listItem.dataset.index = index;
+
+                    const taskText = document.createElement('span');
+                    taskText.textContent = task.text;
+                    taskText.className = "flex-grow break-all dark:text-gray-200"; // テキストが長い場合に折り返す
+
+                    const buttonGroup = document.createElement('div');
+                    buttonGroup.className = "flex items-center gap-2 ml-2";
+
+                    // 完了/未完了ボタン
+                    const completeButton = document.createElement('button');
+                    completeButton.innerHTML = task.completed
+                        ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>' // プラスアイコン（元に戻す）
+                        : '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>'; // チェックアイコン
+                    completeButton.title = task.completed ? "未完了に戻す" : "完了にする";
+                    completeButton.className = "p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors";
+                    completeButton.addEventListener('click', () => toggleComplete(index));
+
+                    // 削除ボタン
+                    const deleteButton = document.createElement('button');
+                    deleteButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>';
+                    deleteButton.title = "削除";
+                    deleteButton.className = "p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors";
+                    deleteButton.addEventListener('click', () => deleteTask(index, listItem));
+
+                    buttonGroup.appendChild(completeButton);
+                    buttonGroup.appendChild(deleteButton);
+
+                    listItem.appendChild(taskText);
+                    listItem.appendChild(buttonGroup);
+                    taskList.appendChild(listItem);
+                });
+                // 完了済みタスクがある場合のみ「完了済みを全て削除」ボタンを表示
+                if (tasks.some(task => task.completed)) {
+                    clearAllButton.classList.remove('hidden');
+                } else {
+                    clearAllButton.classList.add('hidden');
+                }
+            }
+            saveTasks(); // 変更をlocalStorageに保存
+        }
+
+        // localStorageにタスクを保存する関数
+        function saveTasks() {
+            localStorage.setItem('tasks', JSON.stringify(tasks));
+        }
+
+        // タスクを追加する関数
+        function addTask(event) {
+            event.preventDefault(); // フォームのデフォルト送信を防ぐ
+            const taskText = taskInput.value.trim();
+            if (taskText === '') {
+                showMessage('タスクを入力してください。', 'error');
+                return;
+            }
+            tasks.push({ text: taskText, completed: false });
+            taskInput.value = ''; // 入力フィールドをクリア
+            renderTasks();
+            showMessage('タスクを追加しました！', 'success');
+        }
+
+        // タスクの完了/未完了を切り替える関数
+        function toggleComplete(index) {
+            tasks[index].completed = !tasks[index].completed;
+            const taskItem = taskList.querySelector(`li[data-index="${index}"]`);
+            if (taskItem) {
+                if (tasks[index].completed) {
+                    taskItem.classList.add('completed');
+                    showMessage('タスクを完了しました。', 'info');
+                } else {
+                    taskItem.classList.remove('completed');
+                    showMessage('タスクを未完了に戻しました。', 'info');
+                }
+            }
+            renderTasks(); // 再描画してボタンの表示も更新
+        }
+
+        // タスクを削除する関数
+        function deleteTask(index, listItemElement) {
+            // フェードアウトアニメーションを適用
+            listItemElement.classList.add('fade-out');
+            // アニメーション完了後にタスクを削除して再描画
+            setTimeout(() => {
+                tasks.splice(index, 1);
+                renderTasks();
+                showMessage('タスクを削除しました。', 'success');
+            }, 300); // fade-outアニメーションの時間と合わせる
+        }
+
+        // 完了済みのタスクを全て削除する関数
+        function clearAllCompletedTasks() {
+            const initialTaskCount = tasks.length;
+            tasks = tasks.filter(task => !task.completed);
+            if (tasks.length < initialTaskCount) {
+                renderTasks();
+                showMessage('完了済みのタスクを全て削除しました。', 'success');
+            } else {
+                showMessage('削除する完了済みタスクがありません。', 'info');
+            }
+        }
+
+
+        // イベントリスナーの設定
+        taskForm.addEventListener('submit', addTask);
+        clearAllButton.addEventListener('click', clearAllCompletedTasks);
+
+        // 初期表示
+        renderTasks();
+
+        // ダークモード切り替えの簡単な例（実際にはトグルボタンなどが必要）
+        // OSの設定に追従する場合
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+
+    </script>
+</body>
+</html>
